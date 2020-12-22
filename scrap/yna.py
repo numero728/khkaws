@@ -9,6 +9,7 @@ import lxml
 from xmltodict import parse
 import os
 import lxml
+import pymysql
 
 #------------------------------------------------------------------------------------------------------
 
@@ -26,12 +27,6 @@ def article_get(loc):
 
 #------------------------------------------------------------------------------------------------------
 
-path=os.path.abspath(os.getcwd())
-if 'chkduple' in os.listdir(path):
-    pass
-else:
-    os.mkdir('chkduple')
-
 sitemap_url='https://www.yna.co.kr/news-sitemap.xml'
 sitemap_res=requests.get(sitemap_url)
 sitemap_xml=parse(sitemap_res.content,'utf-8')
@@ -44,13 +39,35 @@ news_info=[
     for news in news_list]
 yna_news=pd.DataFrame(news_info,columns=news_info[0].keys())
 
-from datetime import datetime
-stamp=datetime.now().strftime('%Y-%m-%d')
-filename=path+'/chkduple/'+stamp+'.txt'
-news_scrapped=yna_news['loc']
-if os.path.isfile(filename):
-    news_duple=pd.read_csv(filename)
-    yna_news=yna_news[~yna_news['loc'].isin(news_duple['loc'].tolist())]
+#----------------------------------------------------------------------------
+
+conn_=''
+try:
+    conn_=pymysql.connect(
+                        host='khk.cepsu2i8bkn5.ap-northeast-2.rds.amazonaws.com',
+                        user='khk',
+                        password='k2hyokwang2!',
+                        charset='utf8mb4',
+                        cursorclass=pymysql.cursors.DictCursor,
+                        port=3306,
+                        db='scrap_data'
+    )
+
+    with conn_.cursor() as cursor:
+        sql='SELECT loc FROM yna_news;'
+        cursor.execute(sql)
+        rows=cursor.fetchall()
+             
+except Exception as e:
+    print(e)
+finally:
+    conn_.close()
+
+news_scrapped=pd.DataFrame(rows)
+
+yna_news=yna_news[
+    ~(yna_news['loc'].isin(news_scrapped['loc'].tolist()))
+]
 
 #------------------------------------------------------------------------------------------------------
 
@@ -75,7 +92,6 @@ port='3306'
 
 # 2. create_engine 이용
 from sqlalchemy import create_engine
-import pymysql
 
 db_url=f'{dialect}+{driver}://{username}:{password}@{server}:{port}/{database}'
 conn=''
