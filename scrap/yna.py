@@ -10,20 +10,32 @@ from xmltodict import parse
 import os
 import lxml
 import pymysql
+import re
+
 
 #------------------------------------------------------------------------------------------------------
 
-def article_get(loc):
-    try:
-        article_res=requests.get(loc)
-        article_soup=BS(article_res.content,'lxml')
-        article_elems=article_soup.select('#container .story-news p')
-        article_txt=[elem.text for elem in article_elems]
-        article='\n'.join(article_txt)
-    except Exception as e:
-        print(e)
-        article='Null'
-    return article
+def refine(title):
+    re.sub('&lt;',r'<',title)
+    re.sub('&gt;',r'>',title)
+    re.sub('&amp;',r'&',title)
+    re.sub('&apos;',r"'",title)
+    re.sub('&quot;',r'"',title)
+    return title
+
+#------------------------------------------------------------------------------------------------------
+
+# def article_get(loc):
+#     try:
+#         article_res=requests.get(loc)
+#         article_soup=BS(article_res.content,'lxml')
+#         article_elems=article_soup.select('#container .story-news p')
+#         article_txt=[elem.text for elem in article_elems]
+#         article='\n'.join(article_txt)
+#     except Exception as e:
+#         print(e)
+#         article='Null'
+#     return article
 
 #------------------------------------------------------------------------------------------------------
 
@@ -54,7 +66,7 @@ try:
     )
 
     with conn_.cursor() as cursor:
-        sql='SELECT loc FROM yna_news;'
+        sql='SELECT * FROM yna_news;'
         cursor.execute(sql)
         rows=cursor.fetchall()
              
@@ -63,16 +75,20 @@ except Exception as e:
 finally:
     conn_.close()
 
-news_scrapped=pd.DataFrame(rows)
-
-yna_news=yna_news[
+if rows:
+    news_scrapped=pd.DataFrame(rows)
+    yna_news=yna_news[
     ~(yna_news['loc'].isin(news_scrapped['loc'].tolist()))
-]
+    ]
+else:
+    pass
 
 #------------------------------------------------------------------------------------------------------
 
-yna_news['article']=yna_news['loc'].apply(article_get)
+yna_news['title']=yna_news['title'].apply(refine)
+# yna_news['article']=yna_news['loc'].apply(article_get)
 
+print('데이터 수집 완료 -> 적재 이행')
 #------------------------------------------------------------------------------------------------------
 
 dialect='mysql'
@@ -99,7 +115,7 @@ try:
     engine=create_engine(db_url)
     conn=engine.connect()
     yna_news.to_sql('yna_news',conn,if_exists='append', index=False)
-    news_scrapped.to_csv(filename)
+    print('작업 완료')
 except Exception as e:
     print(e)
 finally:
